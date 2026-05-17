@@ -1,224 +1,645 @@
-import { useState, useEffect } from "react";
+import { useState, useRef, useCallback } from "react";
 
-const C = {
-  bg: "#0A0F1E", card: "#111827", border: "#1F2937",
-  accent: "#00D4AA", accentGlow: "#00D4AA44",
-  warn: "#F59E0B", danger: "#EF4444", success: "#10B981",
-  text: "#F9FAFB", dim: "#9CA3AF", muted: "#4B5563",
-  indigo: "#6366F1",
+// ─── Design Tokens ───────────────────────────────────────────
+const T = {
+  bg:       "#070B14",
+  surface:  "#0D1220",
+  card:     "#111827",
+  border:   "#1E2D40",
+  accent:   "#00E5B4",
+  accentLo: "#00E5B418",
+  accentMd: "#00E5B435",
+  gold:     "#F5C842",
+  goldLo:   "#F5C84218",
+  red:      "#F43F5E",
+  redLo:    "#F43F5E18",
+  green:    "#10B981",
+  greenLo:  "#10B98118",
+  blue:     "#3B82F6",
+  blueLo:   "#3B82F618",
+  amber:    "#F59E0B",
+  violet:   "#8B5CF6",
+  text:     "#F1F5F9",
+  sub:      "#94A3B8",
+  muted:    "#475569",
+  font:     "'DM Sans', 'Helvetica Neue', sans-serif",
+  mono:     "'JetBrains Mono', 'Fira Code', monospace",
 };
 
-const ACCOUNTS = [
-  { bank: "HDFC Bank", type: "SAVINGS", masked: "XXXX 4521", balance: 15000, color: "#00D4AA" },
-  { bank: "SBI", type: "SAVINGS", masked: "XXXX 8834", balance: 42500, color: "#6366F1" },
-];
-const TXNS = [
-  { date: "17 May", desc: "Swiggy Order", amount: -450, cat: "Food & Dining", credit: false },
-  { date: "16 May", desc: "Salary Credit", amount: 45000, cat: "Income", credit: true },
-  { date: "15 May", desc: "Rent Payment", amount: -12000, cat: "Housing", credit: false },
-  { date: "14 May", desc: "Amazon", amount: -2399, cat: "Shopping", credit: false },
-  { date: "13 May", desc: "Jio Recharge", amount: -299, cat: "Utilities", credit: false },
-  { date: "12 May", desc: "Zomato", amount: -380, cat: "Food & Dining", credit: false },
-  { date: "11 May", desc: "Uber", amount: -180, cat: "Transport", credit: false },
-  { date: "10 May", desc: "Netflix", amount: -649, cat: "Entertainment", credit: false },
-];
-const SPEND = [
-  { cat: "Rent & Housing", amt: 12000, pct: 42, color: "#6366F1" },
-  { cat: "Food & Dining", amt: 4200, pct: 15, color: "#00D4AA" },
-  { cat: "Shopping", amt: 3800, pct: 13, color: "#F59E0B" },
-  { cat: "Utilities", amt: 1200, pct: 4, color: "#10B981" },
-  { cat: "Transport", amt: 900, pct: 3, color: "#EF4444" },
-  { cat: "Entertainment", amt: 649, pct: 2, color: "#8B5CF6" },
-];
-const BANKS = ["SBI","HDFC","ICICI","Axis","Kotak","PNB","Canara","BoB","IndusInd","Yes Bank","IDFC","Federal"];
+// ─── Helpers ─────────────────────────────────────────────────
+const fmt = (n) => "₹" + Math.abs(n).toLocaleString("en-IN");
+const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
 
-const Pill = ({ children, color }) => (
-  <span style={{ background: color+"22", color, padding:"2px 10px", borderRadius:20, fontSize:11, fontWeight:600 }}>{children}</span>
-);
-const Card = ({ children, style={} }) => (
-  <div style={{ background:C.card, border:`1px solid ${C.border}`, borderRadius:16, padding:20, ...style }}>{children}</div>
+// ─── Sub-components ──────────────────────────────────────────
+const Chip = ({ children, color = T.accent }) => (
+  <span style={{
+    background: color + "25", color, padding: "3px 12px",
+    borderRadius: 20, fontSize: 11, fontWeight: 700, letterSpacing: 0.5,
+    border: `1px solid ${color}40`,
+  }}>{children}</span>
 );
 
-function ConnectScreen({ onConnect }) {
-  const [mobile, setMobile] = useState("");
-  const [loading, setLoading] = useState(false);
-  const go = () => { if(mobile.length!==10) return; setLoading(true); setTimeout(()=>{setLoading(false);onConnect();},1400); };
+const Card = ({ children, style = {}, glow }) => (
+  <div style={{
+    background: T.card, border: `1px solid ${glow ? glow + "50" : T.border}`,
+    borderRadius: 18, padding: 22,
+    boxShadow: glow ? `0 0 28px ${glow}18` : "none",
+    ...style,
+  }}>{children}</div>
+);
+
+const Stat = ({ label, value, sub, color = T.accent, icon }) => (
+  <div style={{
+    background: color + "10", border: `1px solid ${color}30`,
+    borderRadius: 16, padding: "18px 20px", flex: 1, minWidth: 140,
+  }}>
+    <div style={{ fontSize: 22, marginBottom: 8 }}>{icon}</div>
+    <div style={{ fontSize: 22, fontWeight: 800, color, fontFamily: T.mono }}>{value}</div>
+    <div style={{ fontSize: 12, color: T.sub, marginTop: 3 }}>{label}</div>
+    {sub && <div style={{ fontSize: 11, color: T.muted, marginTop: 2 }}>{sub}</div>}
+  </div>
+);
+
+// ─── Animated progress bar ───────────────────────────────────
+const Bar = ({ pct, color, label, amount, rank }) => {
+  const w = clamp(pct, 2, 100);
   return (
-    <div style={{ minHeight:"100vh", background:C.bg, display:"flex", alignItems:"center", justifyContent:"center", padding:20, fontFamily:"system-ui,sans-serif" }}>
-      <div style={{ position:"fixed", top:"15%", left:"50%", transform:"translateX(-50%)", width:500, height:500, background:`radial-gradient(circle,${C.accentGlow} 0%,transparent 70%)`, pointerEvents:"none" }} />
-      <div style={{ width:"100%", maxWidth:420, position:"relative", zIndex:1 }}>
-        <div style={{ textAlign:"center", marginBottom:36 }}>
-          <div style={{ width:64, height:64, borderRadius:20, background:`linear-gradient(135deg,${C.accent},${C.indigo})`, display:"flex", alignItems:"center", justifyContent:"center", fontSize:28, margin:"0 auto 14px", boxShadow:`0 0 40px ${C.accentGlow}` }}>🇮🇳</div>
-          <h1 style={{ fontSize:26, fontWeight:800, color:C.text, margin:0 }}>BankBridge</h1>
-          <p style={{ color:C.dim, marginTop:8, fontSize:14 }}>Connect your Indian bank to Claude · Free</p>
+    <div style={{ marginBottom: 16 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6, alignItems: "center" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <span style={{
+            width: 20, height: 20, borderRadius: 6, background: color + "30",
+            color, fontSize: 10, fontWeight: 800, display: "flex",
+            alignItems: "center", justifyContent: "center",
+          }}>{rank}</span>
+          <span style={{ fontSize: 13, color: T.text, fontWeight: 600 }}>{label}</span>
         </div>
-        <Card style={{ marginBottom:16 }}>
-          <div style={{ marginBottom:18 }}>
-            <div style={{ fontSize:11, color:C.muted, letterSpacing:1, textTransform:"uppercase", marginBottom:8 }}>Mobile Number</div>
-            <div style={{ display:"flex", gap:10 }}>
-              <div style={{ background:C.border, borderRadius:10, padding:"12px 14px", color:C.dim, fontSize:15, fontWeight:600 }}>🇮🇳 +91</div>
-              <input type="tel" maxLength={10} value={mobile} onChange={e=>setMobile(e.target.value.replace(/\D/g,""))} placeholder="9876543210"
-                style={{ flex:1, background:C.border, border:`1px solid ${mobile.length===10?C.accent:C.border}`, borderRadius:10, padding:"12px 16px", color:C.text, fontSize:16, outline:"none", fontFamily:"monospace", transition:"border-color 0.2s" }} />
-            </div>
-          </div>
-          <button onClick={go} disabled={mobile.length!==10||loading}
-            style={{ width:"100%", padding:14, background:mobile.length===10?`linear-gradient(135deg,${C.accent},${C.indigo})`:C.border, border:"none", borderRadius:12, color:mobile.length===10?"#000":C.muted, fontSize:15, fontWeight:700, cursor:mobile.length===10?"pointer":"not-allowed", transition:"all 0.2s", boxShadow:mobile.length===10?`0 0 24px ${C.accentGlow}`:"none", fontFamily:"inherit" }}>
-            {loading ? "⏳ Connecting..." : "Connect My Bank →"}
-          </button>
-        </Card>
-        <Card>
-          <div style={{ fontSize:11, color:C.muted, textAlign:"center", marginBottom:10, letterSpacing:1, textTransform:"uppercase" }}>50+ Banks Supported</div>
-          <div style={{ display:"flex", flexWrap:"wrap", gap:6, justifyContent:"center" }}>
-            {BANKS.map(b=><span key={b} style={{ background:C.border, color:C.dim, padding:"3px 10px", borderRadius:8, fontSize:12 }}>{b}</span>)}
-          </div>
-        </Card>
-        <div style={{ display:"flex", justifyContent:"center", gap:20, marginTop:18 }}>
-          {["🔒 RBI Regulated","🛡️ No Password","✅ OTP Only"].map(x=><span key={x} style={{ fontSize:11, color:C.muted }}>{x}</span>)}
+        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          <span style={{ fontSize: 13, color: T.sub, fontFamily: T.mono }}>{amount}</span>
+          <span style={{ fontSize: 11, color: T.muted }}>{pct}%</span>
         </div>
+      </div>
+      <div style={{ background: T.border, borderRadius: 999, height: 7, overflow: "hidden" }}>
+        <div style={{
+          width: `${w}%`, height: "100%", background: `linear-gradient(90deg, ${color}, ${color}99)`,
+          borderRadius: 999, boxShadow: `0 0 10px ${color}66`,
+          animation: "growBar 1s cubic-bezier(0.34,1.56,0.64,1) forwards",
+        }} />
+      </div>
+    </div>
+  );
+};
+
+// ─── Upload Zone ─────────────────────────────────────────────
+function UploadZone({ onFile }) {
+  const [drag, setDrag] = useState(false);
+  const ref = useRef();
+
+  const handle = (file) => {
+    if (file && file.type === "application/pdf") onFile(file);
+    else alert("Please upload a PDF bank statement.");
+  };
+
+  return (
+    <div
+      onDragOver={(e) => { e.preventDefault(); setDrag(true); }}
+      onDragLeave={() => setDrag(false)}
+      onDrop={(e) => { e.preventDefault(); setDrag(false); handle(e.dataTransfer.files[0]); }}
+      onClick={() => ref.current.click()}
+      style={{
+        border: `2px dashed ${drag ? T.accent : T.border}`,
+        borderRadius: 20, padding: "48px 32px", textAlign: "center",
+        cursor: "pointer", background: drag ? T.accentLo : T.surface,
+        transition: "all 0.25s",
+        boxShadow: drag ? `0 0 40px ${T.accentMd}` : "none",
+      }}
+    >
+      <input ref={ref} type="file" accept=".pdf" style={{ display: "none" }}
+        onChange={(e) => handle(e.target.files[0])} />
+      <div style={{ fontSize: 48, marginBottom: 16 }}>📄</div>
+      <div style={{ fontSize: 18, fontWeight: 800, color: T.text, marginBottom: 8 }}>
+        Drop your bank statement here
+      </div>
+      <div style={{ fontSize: 14, color: T.sub, marginBottom: 20 }}>
+        Works with HDFC · SBI · ICICI · Axis · Kotak · PNB · and all Indian banks
+      </div>
+      <div style={{
+        display: "inline-block", background: `linear-gradient(135deg, ${T.accent}, ${T.blue})`,
+        color: "#000", padding: "12px 28px", borderRadius: 12,
+        fontWeight: 800, fontSize: 14,
+      }}>
+        Choose PDF File
+      </div>
+      <div style={{ marginTop: 20, display: "flex", justifyContent: "center", gap: 24 }}>
+        {["🔒 Never stored", "🤖 AI-powered", "⚡ Results in 10s"].map(x => (
+          <span key={x} style={{ fontSize: 12, color: T.muted }}>{x}</span>
+        ))}
       </div>
     </div>
   );
 }
 
-function BarRow({ item, idx }) {
-  const [w, setW] = useState(0);
-  useEffect(()=>{setTimeout(()=>setW(item.pct),300+idx*100);},[]);
+// ─── Loading State ───────────────────────────────────────────
+function Analyzing({ filename }) {
+  const steps = [
+    "Reading your bank statement…",
+    "Identifying transactions…",
+    "Categorizing spending…",
+    "Calculating cash flow…",
+    "Generating AI insights…",
+  ];
+  const [step, setStep] = useState(0);
+
+  useState(() => {
+    const id = setInterval(() => setStep(s => Math.min(s + 1, steps.length - 1)), 1800);
+    return () => clearInterval(id);
+  });
+
   return (
-    <div style={{ marginBottom:14 }}>
-      <div style={{ display:"flex", justifyContent:"space-between", marginBottom:5 }}>
-        <span style={{ fontSize:13, color:C.text }}>{item.cat}</span>
-        <span style={{ fontSize:13, color:C.dim }}>₹{item.amt.toLocaleString("en-IN")}</span>
+    <div style={{ textAlign: "center", padding: "60px 20px" }}>
+      <div style={{
+        width: 80, height: 80, borderRadius: "50%",
+        background: `conic-gradient(${T.accent} 0%, transparent 60%)`,
+        margin: "0 auto 32px",
+        animation: "spin 1s linear infinite",
+      }} />
+      <div style={{ fontSize: 20, fontWeight: 800, color: T.text, marginBottom: 8 }}>
+        Analyzing {filename}
       </div>
-      <div style={{ background:C.border, borderRadius:999, height:6, overflow:"hidden" }}>
-        <div style={{ width:`${w}%`, height:"100%", background:item.color, borderRadius:999, transition:"width 0.8s cubic-bezier(0.34,1.56,0.64,1)", boxShadow:`0 0 8px ${item.color}88` }} />
+      <div style={{ fontSize: 14, color: T.accent, marginBottom: 32 }}>
+        {steps[step]}
+      </div>
+      <div style={{ display: "flex", flexDirection: "column", gap: 8, maxWidth: 300, margin: "0 auto" }}>
+        {steps.map((s, i) => (
+          <div key={i} style={{ display: "flex", alignItems: "center", gap: 10 }}>
+            <div style={{
+              width: 20, height: 20, borderRadius: "50%", flexShrink: 0,
+              background: i <= step ? T.accent : T.border,
+              display: "flex", alignItems: "center", justifyContent: "center",
+              fontSize: 11, color: i <= step ? "#000" : T.muted,
+              transition: "all 0.4s",
+            }}>{i <= step ? "✓" : ""}</div>
+            <span style={{ fontSize: 13, color: i <= step ? T.text : T.muted, transition: "color 0.4s" }}>{s}</span>
+          </div>
+        ))}
       </div>
     </div>
   );
 }
 
-function Dashboard() {
+// ─── Results Dashboard ────────────────────────────────────────
+function Results({ data, onReset }) {
   const [tab, setTab] = useState("overview");
-  const totalBal = ACCOUNTS.reduce((s,a)=>s+a.balance,0);
-  const totalSpent = SPEND.reduce((s,i)=>s+i.amt,0);
-  const tabs = [["overview","◈ Overview"],["transactions","⇄ Transactions"],["spending","◎ Spending"]];
+  const tabs = [
+    { id: "overview", label: "📊 Overview" },
+    { id: "transactions", label: "⇄ Transactions" },
+    { id: "spending", label: "🎯 Spending" },
+    { id: "insights", label: "🤖 AI Insights" },
+  ];
+
+  const catColors = [T.accent, T.blue, T.amber, T.violet, T.red, T.green, T.gold, "#EC4899"];
 
   return (
-    <div style={{ minHeight:"100vh", background:C.bg, fontFamily:"system-ui,sans-serif", color:C.text }}>
-      <div style={{ position:"fixed", top:0, right:"5%", width:350, height:350, background:`radial-gradient(circle,${C.accentGlow} 0%,transparent 70%)`, pointerEvents:"none", zIndex:0 }} />
-      <div style={{ maxWidth:760, margin:"0 auto", padding:"20px 16px", position:"relative", zIndex:1 }}>
-
-        {/* Header */}
-        <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:24 }}>
-          <div>
-            <div style={{ display:"flex", alignItems:"center", gap:8 }}>
-              <span style={{ fontSize:20 }}>🇮🇳</span>
-              <span style={{ fontSize:17, fontWeight:800, color:C.text }}>BankBridge</span>
-            </div>
-            <div style={{ fontSize:11, color:C.muted, marginTop:2 }}>Setu AA · RBI Licensed</div>
+    <div>
+      {/* Header */}
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 24 }}>
+        <div>
+          <div style={{ fontSize: 22, fontWeight: 900, color: T.text }}>
+            {data.bank_name || "Bank Statement"}
           </div>
-          <Pill color={C.accent}>● Live</Pill>
-        </div>
-
-        {/* Balance Banner */}
-        <div style={{ background:`linear-gradient(135deg,${C.accent}18,${C.indigo}18)`, border:`1px solid ${C.accent}33`, borderRadius:20, padding:"22px 24px", marginBottom:20 }}>
-          <div style={{ fontSize:12, color:C.dim, marginBottom:6 }}>Total Balance</div>
-          <div style={{ fontSize:38, fontWeight:800, color:C.text, fontFamily:"monospace" }}>₹{totalBal.toLocaleString("en-IN")}</div>
-          <div style={{ display:"flex", gap:24, marginTop:14, flexWrap:"wrap" }}>
-            {[["Income","45,000",C.success],["Spent",totalSpent.toLocaleString("en-IN"),C.danger],["Saved",(45000-totalSpent).toLocaleString("en-IN"),C.accent]].map(([l,v,color])=>(
-              <div key={l}>
-                <div style={{ fontSize:11, color:C.dim }}>{l}</div>
-                <div style={{ fontSize:15, color, fontWeight:700 }}>₹{v}</div>
-              </div>
-            ))}
+          <div style={{ fontSize: 13, color: T.sub, marginTop: 3 }}>
+            {data.account_number} · {data.period}
           </div>
         </div>
-
-        {/* Tabs */}
-        <div style={{ display:"flex", gap:6, marginBottom:20, background:C.card, padding:5, borderRadius:13, border:`1px solid ${C.border}` }}>
-          {tabs.map(([id,label])=>(
-            <button key={id} onClick={()=>setTab(id)} style={{ flex:1, padding:"9px", border:"none", borderRadius:9, background:tab===id?C.accent:"transparent", color:tab===id?"#000":C.dim, fontWeight:700, fontSize:12, cursor:"pointer", transition:"all 0.2s", fontFamily:"inherit" }}>
-              {label}
-            </button>
-          ))}
-        </div>
-
-        {/* Overview */}
-        {tab==="overview" && (
-          <div>
-            <div style={{ fontSize:11, color:C.muted, letterSpacing:1, textTransform:"uppercase", marginBottom:12 }}>Accounts</div>
-            <div style={{ display:"flex", gap:14, flexWrap:"wrap", marginBottom:20 }}>
-              {ACCOUNTS.map((acc,i)=>(
-                <div key={i} style={{ flex:1, minWidth:180, background:`linear-gradient(135deg,${acc.color}18,${C.card})`, border:`1px solid ${acc.color}44`, borderRadius:16, padding:18 }}>
-                  <div style={{ display:"flex", justifyContent:"space-between", marginBottom:14 }}>
-                    <div>
-                      <div style={{ fontSize:13, color:C.dim }}>{acc.bank}</div>
-                      <div style={{ fontSize:10, color:C.muted, marginTop:2 }}>{acc.masked}</div>
-                    </div>
-                    <Pill color={acc.color}>{acc.type}</Pill>
-                  </div>
-                  <div style={{ fontSize:26, fontWeight:700, fontFamily:"monospace", color:C.text }}>₹{acc.balance.toLocaleString("en-IN")}</div>
-                </div>
-              ))}
-            </div>
-            <div style={{ display:"grid", gridTemplateColumns:"repeat(3,1fr)", gap:10 }}>
-              {[["⇄","24 Txns","this month",C.indigo],["🏠","Housing","top spend",C.warn],["📈","46%","savings rate",C.success]].map(([icon,val,sub,color],i)=>(
-                <Card key={i} style={{ textAlign:"center", padding:14 }}>
-                  <div style={{ fontSize:20, marginBottom:6 }}>{icon}</div>
-                  <div style={{ fontSize:16, fontWeight:800, color }}>{val}</div>
-                  <div style={{ fontSize:10, color:C.muted, marginTop:2 }}>{sub}</div>
-                </Card>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {/* Transactions */}
-        {tab==="transactions" && (
-          <Card style={{ padding:0, overflow:"hidden" }}>
-            <div style={{ padding:"14px 18px", borderBottom:`1px solid ${C.border}`, display:"flex", justifyContent:"space-between" }}>
-              <span style={{ fontWeight:700, fontSize:14 }}>Recent Transactions</span>
-              <Pill color={C.accent}>{TXNS.length} entries</Pill>
-            </div>
-            {TXNS.map((t,i)=>(
-              <div key={i} style={{ display:"flex", alignItems:"center", padding:"13px 18px", borderBottom:i<TXNS.length-1?`1px solid ${C.border}`:"none" }}>
-                <div style={{ width:38, height:38, borderRadius:11, background:(t.credit?C.success:C.danger)+"22", display:"flex", alignItems:"center", justifyContent:"center", fontSize:15, marginRight:12, flexShrink:0 }}>
-                  {t.credit?"↓":"↑"}
-                </div>
-                <div style={{ flex:1 }}>
-                  <div style={{ fontSize:13, fontWeight:600 }}>{t.desc}</div>
-                  <div style={{ fontSize:11, color:C.dim, marginTop:1 }}>{t.cat} · {t.date}</div>
-                </div>
-                <div style={{ fontSize:14, fontWeight:700, color:t.credit?C.success:C.danger }}>
-                  {t.credit?"+":"-"}₹{Math.abs(t.amount).toLocaleString("en-IN")}
-                </div>
-              </div>
-            ))}
-          </Card>
-        )}
-
-        {/* Spending */}
-        {tab==="spending" && (
-          <Card>
-            <div style={{ display:"flex", justifyContent:"space-between", marginBottom:18 }}>
-              <span style={{ fontWeight:700 }}>Spending Breakdown</span>
-              <Pill color={C.accent}>May 2026</Pill>
-            </div>
-            {SPEND.map((item,i)=><BarRow key={i} item={item} idx={i} />)}
-            <div style={{ marginTop:18, padding:"13px 15px", background:C.border, borderRadius:12, fontSize:13, color:C.dim, lineHeight:1.6 }}>
-              💡 <strong style={{ color:C.text }}>AI Insight:</strong> Rent is 42% of spending. You saved ₹{(45000-totalSpent).toLocaleString("en-IN")} — a healthy 46% savings rate. Reduce food delivery to save an extra ₹2,000/month.
-            </div>
-          </Card>
-        )}
-
-        <div style={{ textAlign:"center", marginTop:28, fontSize:11, color:C.muted }}>
-          Secured by Setu AA · RBI Licensed · No credentials stored · Built for India
-        </div>
+        <button onClick={onReset} style={{
+          background: T.surface, border: `1px solid ${T.border}`, borderRadius: 10,
+          padding: "8px 16px", color: T.sub, fontSize: 13, cursor: "pointer",
+          fontFamily: T.font,
+        }}>↩ New Statement</button>
       </div>
+
+      {/* Stats Row */}
+      <div style={{ display: "flex", gap: 12, flexWrap: "wrap", marginBottom: 24 }}>
+        <Stat icon="💰" label="Closing Balance" value={fmt(data.closing_balance)} color={T.accent} />
+        <Stat icon="📈" label="Total Credits" value={fmt(data.total_credits)} color={T.green} sub={`${data.credit_count} transactions`} />
+        <Stat icon="📉" label="Total Debits" value={fmt(data.total_debits)} color={T.red} sub={`${data.debit_count} transactions`} />
+        <Stat icon="🏦" label="Net Savings" value={fmt(data.net_savings)}
+          color={data.net_savings >= 0 ? T.accent : T.red}
+          sub={data.savings_rate ? `${data.savings_rate}% savings rate` : ""} />
+      </div>
+
+      {/* Tabs */}
+      <div style={{
+        display: "flex", gap: 4, marginBottom: 20,
+        background: T.surface, padding: 5, borderRadius: 14,
+        border: `1px solid ${T.border}`,
+      }}>
+        {tabs.map(t => (
+          <button key={t.id} onClick={() => setTab(t.id)} style={{
+            flex: 1, padding: "10px 8px", border: "none", borderRadius: 10,
+            background: tab === t.id ? T.accent : "transparent",
+            color: tab === t.id ? "#000" : T.sub,
+            fontWeight: 700, fontSize: 12, cursor: "pointer",
+            transition: "all 0.2s", fontFamily: T.font,
+          }}>{t.label}</button>
+        ))}
+      </div>
+
+      {/* Overview Tab */}
+      {tab === "overview" && (
+        <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+          {/* Monthly Cash Flow */}
+          {data.monthly_flow && data.monthly_flow.length > 0 && (
+            <Card glow={T.accent}>
+              <div style={{ fontSize: 14, fontWeight: 700, color: T.text, marginBottom: 16 }}>
+                Monthly Cash Flow
+              </div>
+              {data.monthly_flow.map((m, i) => (
+                <div key={i} style={{
+                  display: "flex", justifyContent: "space-between", alignItems: "center",
+                  padding: "10px 0", borderBottom: i < data.monthly_flow.length - 1 ? `1px solid ${T.border}` : "none",
+                }}>
+                  <span style={{ fontSize: 14, color: T.text, fontWeight: 600 }}>{m.month}</span>
+                  <div style={{ display: "flex", gap: 20 }}>
+                    <span style={{ fontSize: 13, color: T.green, fontFamily: T.mono }}>+{fmt(m.credits)}</span>
+                    <span style={{ fontSize: 13, color: T.red, fontFamily: T.mono }}>-{fmt(m.debits)}</span>
+                    <Chip color={m.credits >= m.debits ? T.green : T.red}>
+                      {m.credits >= m.debits ? "Surplus" : "Deficit"}
+                    </Chip>
+                  </div>
+                </div>
+              ))}
+            </Card>
+          )}
+
+          {/* Top Merchants */}
+          {data.top_merchants && data.top_merchants.length > 0 && (
+            <Card>
+              <div style={{ fontSize: 14, fontWeight: 700, color: T.text, marginBottom: 16 }}>
+                Top Merchants
+              </div>
+              {data.top_merchants.map((m, i) => (
+                <div key={i} style={{
+                  display: "flex", justifyContent: "space-between", alignItems: "center",
+                  padding: "9px 0", borderBottom: i < data.top_merchants.length - 1 ? `1px solid ${T.border}` : "none",
+                }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                    <span style={{
+                      width: 28, height: 28, borderRadius: 8, background: T.accentLo,
+                      color: T.accent, fontSize: 12, fontWeight: 800,
+                      display: "flex", alignItems: "center", justifyContent: "center",
+                    }}>{i + 1}</span>
+                    <span style={{ fontSize: 13, color: T.text }}>{m.name}</span>
+                  </div>
+                  <span style={{ fontSize: 13, color: T.sub, fontFamily: T.mono }}>{fmt(m.amount)}</span>
+                </div>
+              ))}
+            </Card>
+          )}
+        </div>
+      )}
+
+      {/* Transactions Tab */}
+      {tab === "transactions" && (
+        <Card style={{ padding: 0, overflow: "hidden" }}>
+          <div style={{
+            padding: "14px 20px", borderBottom: `1px solid ${T.border}`,
+            display: "flex", justifyContent: "space-between", alignItems: "center",
+          }}>
+            <span style={{ fontWeight: 700, color: T.text }}>All Transactions</span>
+            <Chip>{data.transactions?.length || 0} entries</Chip>
+          </div>
+          <div style={{ maxHeight: 480, overflowY: "auto" }}>
+            {(data.transactions || []).map((t, i) => (
+              <div key={i} style={{
+                display: "flex", alignItems: "center", padding: "13px 20px",
+                borderBottom: `1px solid ${T.border}`,
+                background: i % 2 === 0 ? "transparent" : T.surface + "80",
+              }}>
+                <div style={{
+                  width: 38, height: 38, borderRadius: 11, flexShrink: 0,
+                  background: t.type === "CR" ? T.greenLo : T.redLo,
+                  display: "flex", alignItems: "center", justifyContent: "center",
+                  fontSize: 16, marginRight: 12,
+                }}>{t.type === "CR" ? "↓" : "↑"}</div>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{
+                    fontSize: 13, fontWeight: 600, color: T.text,
+                    whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
+                  }}>{t.description}</div>
+                  <div style={{ fontSize: 11, color: T.muted, marginTop: 2 }}>
+                    {t.category} · {t.date}
+                  </div>
+                </div>
+                <div style={{ textAlign: "right", flexShrink: 0, marginLeft: 12 }}>
+                  <div style={{
+                    fontSize: 14, fontWeight: 700, fontFamily: T.mono,
+                    color: t.type === "CR" ? T.green : T.red,
+                  }}>
+                    {t.type === "CR" ? "+" : "-"}{fmt(t.amount)}
+                  </div>
+                  {t.balance && (
+                    <div style={{ fontSize: 11, color: T.muted, marginTop: 2 }}>Bal: {fmt(t.balance)}</div>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        </Card>
+      )}
+
+      {/* Spending Tab */}
+      {tab === "spending" && (
+        <Card>
+          <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 20 }}>
+            <span style={{ fontSize: 14, fontWeight: 700, color: T.text }}>Spending by Category</span>
+            <Chip>{fmt(data.total_debits)} total</Chip>
+          </div>
+          {(data.spending_categories || []).map((c, i) => (
+            <Bar
+              key={i}
+              label={c.category}
+              amount={fmt(c.amount)}
+              pct={c.percentage}
+              color={catColors[i % catColors.length]}
+              rank={i + 1}
+            />
+          ))}
+        </Card>
+      )}
+
+      {/* AI Insights Tab */}
+      {tab === "insights" && (
+        <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+          {/* Health Score */}
+          <Card glow={T.accent}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
+              <span style={{ fontSize: 14, fontWeight: 700, color: T.text }}>Financial Health Score</span>
+              <span style={{
+                fontSize: 28, fontWeight: 900, fontFamily: T.mono,
+                color: data.health_score >= 70 ? T.green : data.health_score >= 40 ? T.amber : T.red,
+              }}>{data.health_score}<span style={{ fontSize: 14, color: T.muted }}>/100</span></span>
+            </div>
+            <div style={{ background: T.border, borderRadius: 999, height: 10, overflow: "hidden" }}>
+              <div style={{
+                width: `${data.health_score}%`, height: "100%",
+                background: data.health_score >= 70
+                  ? `linear-gradient(90deg, ${T.green}, ${T.accent})`
+                  : data.health_score >= 40
+                    ? `linear-gradient(90deg, ${T.amber}, ${T.gold})`
+                    : `linear-gradient(90deg, ${T.red}, ${T.amber})`,
+                borderRadius: 999, transition: "width 1s ease",
+              }} />
+            </div>
+          </Card>
+
+          {/* Insights */}
+          {(data.insights || []).map((insight, i) => (
+            <Card key={i} style={{ borderLeft: `4px solid ${insight.type === "warning" ? T.red : insight.type === "tip" ? T.accent : T.green}` }}>
+              <div style={{ display: "flex", gap: 12, alignItems: "flex-start" }}>
+                <span style={{ fontSize: 22, flexShrink: 0 }}>{insight.icon}</span>
+                <div>
+                  <div style={{ fontSize: 14, fontWeight: 700, color: T.text, marginBottom: 4 }}>
+                    {insight.title}
+                  </div>
+                  <div style={{ fontSize: 13, color: T.sub, lineHeight: 1.6 }}>{insight.body}</div>
+                </div>
+              </div>
+            </Card>
+          ))}
+
+          {/* Recommendations */}
+          {data.recommendations && (
+            <Card>
+              <div style={{ fontSize: 14, fontWeight: 700, color: T.text, marginBottom: 14 }}>
+                🎯 Action Plan
+              </div>
+              {data.recommendations.map((r, i) => (
+                <div key={i} style={{
+                  display: "flex", gap: 12, padding: "10px 0",
+                  borderBottom: i < data.recommendations.length - 1 ? `1px solid ${T.border}` : "none",
+                }}>
+                  <div style={{
+                    width: 24, height: 24, borderRadius: 8, background: T.accentLo,
+                    color: T.accent, fontSize: 12, fontWeight: 800, flexShrink: 0,
+                    display: "flex", alignItems: "center", justifyContent: "center",
+                  }}>{i + 1}</div>
+                  <span style={{ fontSize: 13, color: T.sub, lineHeight: 1.6 }}>{r}</span>
+                </div>
+              ))}
+            </Card>
+          )}
+        </div>
+      )}
     </div>
   );
 }
 
+// ─── Main App ─────────────────────────────────────────────────
 export default function App() {
-  const [connected, setConnected] = useState(false);
-  return connected ? <Dashboard /> : <ConnectScreen onConnect={()=>setConnected(true)} />;
+  const [phase, setPhase] = useState("upload"); // upload | analyzing | results | error
+  const [filename, setFilename] = useState("");
+  const [results, setResults] = useState(null);
+  const [error, setError] = useState("");
+
+  const toBase64 = (file) => new Promise((res, rej) => {
+    const r = new FileReader();
+    r.onload = () => res(r.result.split(",")[1]);
+    r.onerror = () => rej(new Error("Read failed"));
+    r.readAsDataURL(file);
+  });
+
+  const analyze = useCallback(async (file) => {
+    setFilename(file.name);
+    setPhase("analyzing");
+    setError("");
+
+    try {
+      const base64 = await toBase64(file);
+
+      const prompt = `Analyze this Indian bank statement PDF. Return ONLY raw JSON, no markdown, no explanation, no code fences. Start your response with { and end with }.
+
+Use this exact structure:
+{"bank_name":"","account_number":"XXXX1234","period":"","opening_balance":0,"closing_balance":0,"total_credits":0,"total_debits":0,"credit_count":0,"debit_count":0,"net_savings":0,"savings_rate":0,"health_score":70,"monthly_flow":[{"month":"","credits":0,"debits":0}],"transactions":[{"date":"","description":"","amount":0,"type":"CR","category":"","balance":0}],"spending_categories":[{"category":"","amount":0,"percentage":0}],"top_merchants":[{"name":"","amount":0}],"insights":[{"type":"tip","icon":"💡","title":"","body":""}],"recommendations":[""]}
+
+Rules:
+- type is "CR" for credit, "DR" for debit
+- health_score 0-100 based on savings rate and habits
+- Categories: Food & Dining, Transport, Shopping, Utilities, Rent & Housing, Health & Medical, Entertainment, Education, Salary & Income, ATM & Cash, Transfers, Investment, Insurance, Other
+- Limit transactions to max 50 most recent
+- spending_categories: only debit spending, sorted by amount desc
+- insights: 3-5 items, mix of warning/tip/good types
+- recommendations: 3 specific actionable items
+- All amounts in numbers not strings
+- IMPORTANT: Keep JSON compact, complete the entire object`;
+
+      const response = await fetch("https://api.anthropic.com/v1/messages", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          model: "claude-sonnet-4-20250514",
+          max_tokens: 8000,
+          messages: [
+            {
+              role: "user",
+              content: [
+                {
+                  type: "document",
+                  source: { type: "base64", media_type: "application/pdf", data: base64 },
+                },
+                { type: "text", text: prompt },
+              ],
+            },
+          ],
+        }),
+      });
+
+      if (!response.ok) {
+        const err = await response.json().catch(() => ({}));
+        throw new Error(err.error?.message || `API error ${response.status}`);
+      }
+
+      const data = await response.json();
+      const raw = data.content?.find(b => b.type === "text")?.text || "";
+
+      // Robust JSON extraction — find outermost { }
+      const extract = (str) => {
+        const start = str.indexOf("{");
+        if (start === -1) throw new Error("No JSON found in response");
+        let depth = 0;
+        for (let i = start; i < str.length; i++) {
+          if (str[i] === "{") depth++;
+          else if (str[i] === "}") {
+            depth--;
+            if (depth === 0) return str.slice(start, i + 1);
+          }
+        }
+        throw new Error("PDF too large — try a 1-month statement instead.");
+      };
+
+      const jsonStr = extract(raw);
+      const parsed = JSON.parse(jsonStr);
+
+      setResults(parsed);
+      setPhase("results");
+    } catch (e) {
+      setError(e.message || "Analysis failed. Please try again.");
+      setPhase("error");
+    }
+  }, []);
+
+  return (
+    <>
+      <style>{`
+        @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800;900&display=swap');
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body { background: ${T.bg}; }
+        ::-webkit-scrollbar { width: 6px; }
+        ::-webkit-scrollbar-track { background: ${T.surface}; }
+        ::-webkit-scrollbar-thumb { background: ${T.border}; border-radius: 3px; }
+        @keyframes spin { to { transform: rotate(360deg); } }
+        @keyframes growBar { from { width: 0; } }
+        @keyframes fadeUp { from { opacity:0; transform:translateY(16px); } to { opacity:1; transform:translateY(0); } }
+      `}</style>
+
+      <div style={{
+        minHeight: "100vh", background: T.bg,
+        fontFamily: T.font, color: T.text,
+        padding: "0 0 48px",
+      }}>
+        {/* Top Nav */}
+        <div style={{
+          borderBottom: `1px solid ${T.border}`, padding: "16px 24px",
+          display: "flex", justifyContent: "space-between", alignItems: "center",
+          background: T.surface, position: "sticky", top: 0, zIndex: 10,
+        }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+            <div style={{
+              width: 34, height: 34, borderRadius: 10,
+              background: `linear-gradient(135deg, ${T.accent}, ${T.blue})`,
+              display: "flex", alignItems: "center", justifyContent: "center", fontSize: 16,
+            }}>🇮🇳</div>
+            <div>
+              <div style={{ fontSize: 15, fontWeight: 800, color: T.text }}>BankBridge</div>
+              <div style={{ fontSize: 10, color: T.muted }}>AI Bank Statement Analyzer</div>
+            </div>
+          </div>
+          <div style={{ display: "flex", gap: 8 }}>
+            <Chip color={T.green}>Free</Chip>
+            <Chip color={T.blue}>All Indian Banks</Chip>
+          </div>
+        </div>
+
+        <div style={{
+          maxWidth: 780, margin: "0 auto", padding: "32px 20px",
+          animation: "fadeUp 0.5s ease forwards",
+        }}>
+          {phase === "upload" && (
+            <>
+              {/* Hero */}
+              <div style={{ textAlign: "center", marginBottom: 40 }}>
+                <div style={{
+                  display: "inline-block", background: T.accentLo, border: `1px solid ${T.accentMd}`,
+                  borderRadius: 20, padding: "6px 16px", fontSize: 12, color: T.accent,
+                  fontWeight: 700, marginBottom: 20, letterSpacing: 0.5,
+                }}>
+                  🤖 POWERED BY CLAUDE AI
+                </div>
+                <h1 style={{
+                  fontSize: 38, fontWeight: 900, color: T.text,
+                  lineHeight: 1.15, marginBottom: 14,
+                }}>
+                  Understand your<br />
+                  <span style={{ color: T.accent }}>bank statement</span> instantly
+                </h1>
+                <p style={{ fontSize: 16, color: T.sub, maxWidth: 480, margin: "0 auto" }}>
+                  Upload any Indian bank PDF — Claude AI reads it and gives you balance, spending breakdown, and financial insights in seconds.
+                </p>
+              </div>
+
+              <UploadZone onFile={analyze} />
+
+              {/* How it works */}
+              <div style={{ display: "flex", gap: 16, marginTop: 32, flexWrap: "wrap" }}>
+                {[
+                  ["📤", "Upload PDF", "Your HDFC, SBI, ICICI — any bank statement"],
+                  ["🤖", "AI Analyzes", "Claude reads every transaction instantly"],
+                  ["📊", "Get Insights", "Balance, spending, trends, action plan"],
+                ].map(([icon, title, desc]) => (
+                  <div key={title} style={{
+                    flex: 1, minWidth: 180, textAlign: "center",
+                    padding: "20px 16px", background: T.surface,
+                    border: `1px solid ${T.border}`, borderRadius: 16,
+                  }}>
+                    <div style={{ fontSize: 28, marginBottom: 10 }}>{icon}</div>
+                    <div style={{ fontSize: 14, fontWeight: 700, color: T.text, marginBottom: 6 }}>{title}</div>
+                    <div style={{ fontSize: 12, color: T.muted, lineHeight: 1.5 }}>{desc}</div>
+                  </div>
+                ))}
+              </div>
+            </>
+          )}
+
+          {phase === "analyzing" && <Analyzing filename={filename} />}
+
+          {phase === "results" && results && (
+            <Results data={results} onReset={() => { setPhase("upload"); setResults(null); }} />
+          )}
+
+          {phase === "error" && (
+            <div style={{ textAlign: "center", padding: 60 }}>
+              <div style={{ fontSize: 48, marginBottom: 20 }}>⚠️</div>
+              <div style={{ fontSize: 18, fontWeight: 700, color: T.red, marginBottom: 12 }}>Analysis Failed</div>
+              <div style={{ fontSize: 14, color: T.sub, marginBottom: 28, maxWidth: 400, margin: "0 auto 28px" }}>{error}</div>
+              <button onClick={() => setPhase("upload")} style={{
+                background: T.accent, border: "none", borderRadius: 12,
+                padding: "12px 28px", color: "#000", fontWeight: 700,
+                fontSize: 14, cursor: "pointer", fontFamily: T.font,
+              }}>Try Again</button>
+            </div>
+          )}
+        </div>
+      </div>
+    </>
+  );
 }
