@@ -1,0 +1,15 @@
+{
+  "mcpServers": {
+    "india-bank-connector": {
+      "command": "node",
+      "args": ["/path/to/india-bank-mcp/mcp-server/src/index.js"],
+      "env": {
+        "SETU_BASE_URL": "https://fiu-sandbox.setu.co",
+        "SETU_CLIENT_ID": "YOUR_CLIENT_ID",
+        "SETU_CLIENT_SECRET": "YOUR_CLIENT_SECRET",
+        "SETU_PRODUCT_INSTANCE_ID": "YOUR_PRODUCT_INSTANCE_ID",
+        "FRONTEND_URL": "http://localhost:3000"
+      }
+    }
+  }
+}
