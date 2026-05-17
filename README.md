@@ -1,10 +1,10 @@
 # 🇮🇳 BankBridge — India Bank MCP Connector
-### Connect any Indian bank to Claude. Built on Setu Account Aggregator.
+### Connect any Indian bank to AI. Built on Setu Account Aggregator.
 
 ---
 
 ## What This Does
-Ask Claude questions like:
+Ask AI questions like:
 - "What's my bank balance?"
 - "Where did I spend most this month?"
 - "Show my last 20 transactions"
@@ -34,11 +34,11 @@ cp .env.example .env
 npm start
 ```
 
-### Step 3 — Connect to Claude Desktop
-Add to your Claude Desktop config file:
+### Step 3 — Connect to AI Desktop
+Add to your AI Desktop config file:
 
-**Mac:** `~/Library/Application Support/Claude/claude_desktop_config.json`
-**Windows:** `%APPDATA%\Claude\claude_desktop_config.json`
+**Mac:** `~/Library/Application Support/AI/ai_desktop_config.json` (formerly Claude)
+**Windows:** `%APPDATA%\AI\ai_desktop_config.json` (formerly Claude)
 
 ```json
 {
@@ -56,7 +56,7 @@ Add to your Claude Desktop config file:
 }
 ```
 
-Restart Claude Desktop.
+Restart AI Desktop.
 
 ### Step 4 — Run Frontend Dashboard
 ```bash
@@ -68,7 +68,7 @@ npm run dev
 
 ---
 
-## Usage in Claude
+## Usage in AI
 
 Once connected, just ask:
 ```
@@ -127,13 +127,13 @@ india-bank-mcp/
 ├── frontend/
 │   └── src/
 │       └── App.jsx       ← Full React dashboard
-├── claude-config.json    ← Claude Desktop config
+├── ai-config.json    ← AI Desktop config
 └── README.md
 ```
 
 ---
 
-## MCP Tools Available to Claude
+## MCP Tools Available to AI
 
 | Tool | Description |
 |---|---|

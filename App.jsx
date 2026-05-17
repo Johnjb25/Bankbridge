@@ -583,7 +583,7 @@ Rules:
                   borderRadius: 20, padding: "6px 16px", fontSize: 12, color: T.accent,
                   fontWeight: 700, marginBottom: 20, letterSpacing: 0.5,
                 }}>
-                  🤖 POWERED BY CLAUDE AI
+                  🤖 POWERED BY AI
                 </div>
                 <h1 style={{
                   fontSize: 38, fontWeight: 900, color: T.text,
@@ -593,7 +593,7 @@ Rules:
                   <span style={{ color: T.accent }}>bank statement</span> instantly
                 </h1>
                 <p style={{ fontSize: 16, color: T.sub, maxWidth: 480, margin: "0 auto" }}>
-                  Upload any Indian bank PDF — Claude AI reads it and gives you balance, spending breakdown, and financial insights in seconds.
+                  Upload any Indian bank PDF — AI reads it and gives you balance, spending breakdown, and financial insights in seconds.
                 </p>
               </div>
 
@@ -603,7 +603,7 @@ Rules:
               <div style={{ display: "flex", gap: 16, marginTop: 32, flexWrap: "wrap" }}>
                 {[
                   ["📤", "Upload PDF", "Your HDFC, SBI, ICICI — any bank statement"],
-                  ["🤖", "AI Analyzes", "Claude reads every transaction instantly"],
+                  ["🤖", "AI Analyzes", "AI reads every transaction instantly"],
                   ["📊", "Get Insights", "Balance, spending, trends, action plan"],
                 ].map(([icon, title, desc]) => (
                   <div key={title} style={{

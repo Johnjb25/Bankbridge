@@ -21,7 +21,7 @@ const userSessions = new Map();
 const server = new McpServer({
   name: "india-bank-connector",
   version: "1.0.0",
-  description: "Connect your Indian bank account to Claude via Setu Account Aggregator",
+  description: "Connect your Indian bank account to AI via Setu Account Aggregator",
 });
 
 // ─────────────────────────────────────────────
@@ -61,7 +61,7 @@ server.tool(
                 "2. Select your bank (HDFC, SBI, ICICI, etc.)",
                 "3. Enter your registered mobile OTP",
                 "4. Approve the data access request",
-                "5. Come back and ask Claude to show your accounts",
+                "5. Come back and ask AI to show your accounts",
               ],
               supported_banks: [
                 "SBI", "HDFC", "ICICI", "Axis", "Kotak", "PNB",
@@ -344,4 +344,4 @@ server.tool(
 // ─────────────────────────────────────────────
 const transport = new StdioServerTransport();
 await server.connect(transport);
-console.error("🇮🇳 India Bank MCP Server running — Connect your Indian bank to Claude!");
+console.error("🇮🇳 India Bank MCP Server running — Connect your Indian bank to AI!");
